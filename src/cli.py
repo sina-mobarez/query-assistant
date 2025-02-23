@@ -13,11 +13,28 @@ from prompt_toolkit.styles import Style
 from pygments.lexers.sql import SqlLexer
 from database import Database
 from history import QueryHistory
+from nlp import NLPToSQL
 
 console = Console()
 app = typer.Typer()
 query_history = QueryHistory()
 
+class CLI:
+    def __init__(self):
+        self.db = Database()
+        self.nlp = NLPToSQL()
+
+    def process_natural_query(self, query: str) -> Optional[str]:
+        """Process natural language query and return SQL"""
+        sql = self.nlp.generate_sql(query, self.db)
+        if sql:
+            console.print("\n[bold blue]Generated SQL:[/bold blue]")
+            console.print(Syntax(sql, "sql", theme="monokai"))
+            
+            # Ask for confirmation
+            if Confirm.ask("Execute this SQL query?"):
+                return sql
+        return None
 
 def display_result(results: Optional[List[Dict]]):
     """Display query results in a formatted table."""
@@ -61,50 +78,59 @@ def display_query_history():
 def interactive_mode():
     """Interactive REPL mode"""
 
-    db = Database()
-    if not db.connect():
-        console.print("[red]Unable to connect to database[/red]")
+    cli = CLI()
+    if not cli.db.connect():
+        console.print("[red]Failed to connect to database[/red]")
         return
 
     session = PromptSession(
         history=InMemoryHistory(),
-        lexer=PygmentsLexer(SqlLexer),
-        style=Style.from_dict(
-            {
-                "propmt": "ansicyan bold",
-            }
-        ),
+        style=Style.from_dict({
+            'prompt': 'ansicyan bold',
+        })
     )
 
-    console.print("[bold green]Welcome to Query Assistant ![/bold green]")
-    console.print("Just ask me your question or special commands:")
+    console.print("[bold green]Welcome to PostgreSQL Interactive CLI with NLP![/bold green]")
+    console.print("Enter SQL queries, natural language queries, or special commands:")
     console.print("  [blue]\\q[/blue] - Quit")
     console.print("  [blue]\\h[/blue] - Show query history")
     console.print("  [blue]\\c[/blue] - Clear screen")
+    console.print("\nTip: Start your query with '?' to use natural language processing")
 
     try:
         while True:
             try:
-                query = session.prompt("> ")
+                user_input = session.prompt(" > ")
+                
 
-                if query.lower() in ("\\q", "quit", "exit"):
+                if user_input.lower() in ('\\q', 'quit', 'exit'):
                     break
-                elif query.lower() in ("\\h", "history"):
+                elif user_input.lower() in ('\\h', 'history'):
                     display_query_history()
                     continue
-                elif query.lower() in ("\\c", "clear"):
+                elif user_input.lower() in ('\\c', 'clear'):
                     console.clear()
                     continue
-                elif not query.strip():
+                elif not user_input.strip():
                     continue
 
-                results = db.execute_query(query)
+
+                if user_input.startswith('?'):
+                    natural_query = user_input[1:].strip()
+                    sql = cli.process_natural_query(natural_query)
+                    if not sql:
+                        continue
+                else:
+                    sql = user_input
+
+
+                results = cli.db.execute_query(sql)
                 success = results is not None
-                query_history.add_query(query, success)
+                query_history.add_query(sql, success)
+                
 
                 if success:
                     display_result(results)
-
                     console.print("[dim]Query executed successfully[/dim]")
 
             except KeyboardInterrupt:
@@ -113,10 +139,10 @@ def interactive_mode():
                 break
             except Exception as e:
                 console.print(f"[red]Error: {str(e)}[/red]")
-                query_history.add_query(query, False)
+                query_history.add_query(user_input, False)
 
     finally:
-        db.disconnect()
+        cli.db.disconnect()
         console.print("\nGoodbye!")
 
 
