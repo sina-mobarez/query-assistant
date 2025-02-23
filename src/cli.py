@@ -1,9 +1,11 @@
 from typing import Dict, List, Optional
 from rich.console import Console
 from rich.table import Table
+import typer
+from database import Database
 
 console = Console()
-
+app = typer.Typer()
 
 def display_result(results: Optional[List[Dict]]):
     """Display query results in a formatted table."""
@@ -22,3 +24,26 @@ def display_result(results: Optional[List[Dict]]):
 
         console.print(table)
 
+@app.command()
+def query(
+        sql: str = typer.Option(..., "--sql", "-s", help="SQL query to execute"),
+        save: bool = typer.Option(False, "--save", "-S", help="Save query results to file"),
+):
+    """Execute SQL query and display results."""
+    db = Database()
+
+    try:
+        results = db.execute_query(sql)
+        display_result(results)
+
+        if save and results:
+            import json
+            from datetime import datetime
+
+            filename = f"query_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(filename, "w") as f:
+                json.dump(results, f, indent=2)
+            console.print(f"[green]Results saved to {filename}[/green].")
+
+    finally:
+        db.disconnect()
