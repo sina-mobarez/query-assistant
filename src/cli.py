@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+from pathlib import Path
 import typer
 from typing import Dict, List, Optional
 from rich.console import Console
@@ -8,9 +9,7 @@ from rich.syntax import Syntax
 from rich.prompt import Confirm
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
-from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.styles import Style
-from pygments.lexers.sql import SqlLexer
 from database import Database
 from history import QueryHistory
 from nlp import NLPToSQL
@@ -19,10 +18,18 @@ console = Console()
 app = typer.Typer()
 query_history = QueryHistory()
 
+
 class CLI:
     def __init__(self):
         self.db = Database()
         self.nlp = NLPToSQL()
+
+        examples_path = Path("../examples.gist")
+        if examples_path.exists():
+            if self.nlp.load_examples(examples_path):
+                console.print("[green]Loaded query examples successfully[/green]")
+            else:
+                console.print("[yellow]No valid query examples found[/yellow]")
 
     def process_natural_query(self, query: str) -> Optional[str]:
         """Process natural language query and return SQL"""
@@ -30,11 +37,11 @@ class CLI:
         if sql:
             console.print("\n[bold blue]Generated SQL:[/bold blue]")
             console.print(Syntax(sql, "sql", theme="monokai"))
-            
-            # Ask for confirmation
+
             if Confirm.ask("Execute this SQL query?"):
                 return sql
         return None
+
 
 def display_result(results: Optional[List[Dict]]):
     """Display query results in a formatted table."""
@@ -85,12 +92,16 @@ def interactive_mode():
 
     session = PromptSession(
         history=InMemoryHistory(),
-        style=Style.from_dict({
-            'prompt': 'ansicyan bold',
-        })
+        style=Style.from_dict(
+            {
+                "prompt": "ansicyan bold",
+            }
+        ),
     )
 
-    console.print("[bold green]Welcome to PostgreSQL Interactive CLI with NLP![/bold green]")
+    console.print(
+        "[bold green]Welcome to PostgreSQL Interactive CLI with NLP![/bold green]"
+    )
     console.print("Enter SQL queries, natural language queries, or special commands:")
     console.print("  [blue]\\q[/blue] - Quit")
     console.print("  [blue]\\h[/blue] - Show query history")
@@ -101,21 +112,19 @@ def interactive_mode():
         while True:
             try:
                 user_input = session.prompt(" > ")
-                
 
-                if user_input.lower() in ('\\q', 'quit', 'exit'):
+                if user_input.lower() in ("\\q", "quit", "exit"):
                     break
-                elif user_input.lower() in ('\\h', 'history'):
+                elif user_input.lower() in ("\\h", "history"):
                     display_query_history()
                     continue
-                elif user_input.lower() in ('\\c', 'clear'):
+                elif user_input.lower() in ("\\c", "clear"):
                     console.clear()
                     continue
                 elif not user_input.strip():
                     continue
 
-
-                if user_input.startswith('?'):
+                if user_input.startswith("?"):
                     natural_query = user_input[1:].strip()
                     sql = cli.process_natural_query(natural_query)
                     if not sql:
@@ -123,11 +132,9 @@ def interactive_mode():
                 else:
                     sql = user_input
 
-
                 results = cli.db.execute_query(sql)
                 success = results is not None
                 query_history.add_query(sql, success)
-                
 
                 if success:
                     display_result(results)
