@@ -1,6 +1,8 @@
 from datetime import datetime
 import json
 from pathlib import Path
+import threading
+import time
 import typer
 from typing import Dict, List, Optional
 from rich.console import Console
@@ -23,6 +25,7 @@ class CLI:
     def __init__(self):
         self.db = Database()
         self.nlp = NLPToSQL()
+        self._stop_animation = False
 
         examples_path = Path("../examples.gist")
         if examples_path.exists():
@@ -33,15 +36,34 @@ class CLI:
 
     def process_natural_query(self, query: str) -> Optional[str]:
         """Process natural language query and return SQL"""
-        sql = self.nlp.generate_sql(query, self.db)
-        if sql:
-            console.print("\n[bold blue]Generated SQL:[/bold blue]")
-            console.print(Syntax(sql, "sql", theme="monokai"))
+        self._stop_animation = False
+        animation_thread = threading.Thread(target=self._show_thinking_animation)
+        animation_thread.daemon = True
+        animation_thread.start()
+        try:
+            sql = self.nlp.generate_sql(query, self.db)
+            
+            self._stop_animation = True
+            animation_thread.join()
+            if sql:
+                console.print("\n[bold blue]Generated SQL:[/bold blue]")
+                console.print(Syntax(sql, "sql", theme="monokai"))
 
-            if Confirm.ask("Execute this SQL query?"):
-                return sql
-        return None
-
+                if Confirm.ask("Execute this SQL query?"):
+                    return sql
+            return None
+        except Exception as e:
+            self._stop_animation = True
+            animation_thread.join()
+            console.print(f"[red]Error: {str(e)}[/red]")
+            return None
+        
+    def _show_thinking_animation(self):
+            """Display a thinking animation while waiting for the model response"""
+            with console.status("[bold blue]Thinking...[/bold blue]", spinner="dots") as status:
+                while not self._stop_animation:
+                    time.sleep(0.1)
+                    
 
 def display_result(results: Optional[List[Dict]]):
     """Display query results in a formatted table."""
