@@ -1,10 +1,11 @@
 # PostgreSQL NLP CLI
 
-A powerful command-line interface that combines PostgreSQL database interaction with Natural Language Processing, allowing users to query databases using natural language. The CLI translates English queries into SQL using local LLMs through Ollama, with support for example-based learning.
+A powerful command-line interface that combines PostgreSQL database interaction with Natural Language Processing, allowing users to query databases using natural language. The CLI translates English queries into SQL using configurable LLM providers (local LLMs through Ollama or cloud APIs via OpenRouter), with support for example-based learning.
 
 ## Features
 
-- 🤖 Natural Language to SQL translation using local LLMs (Ollama)
+- 🤖 Natural Language to SQL translation using configurable LLM providers
+- 🌐 Support for multiple LLM providers (Ollama, OpenRouter)
 - 📚 Example-based learning from `.gist` files
 - 🔍 Interactive CLI with command history
 - 💾 Persistent query history
@@ -17,24 +18,28 @@ A powerful command-line interface that combines PostgreSQL database interaction 
 
 - **Python 3.8+**
 - **PostgreSQL** - Database
-- **Ollama** - Local LLM service
+- **LLM Providers**:
+  - **Ollama** - Local LLM service
+  - **OpenRouter** - Cloud-based LLM API service
 - **Key Libraries**:
   - `psycopg2-binary` - PostgreSQL adapter
   - `python-dotenv` - Environment management
   - `rich` - Terminal formatting
   - `prompt-toolkit` - Interactive CLI
   - `typer` - CLI framework
-  - `requests` - HTTP client for Ollama API
+  - `requests` - HTTP client for API calls
   - `sqlparse` - SQL formatting
 
 ## Prerequisites
 
 1. **Python 3.8 or higher**
 2. **PostgreSQL** installed and running
-3. **Ollama** installed with Gemma 2B model
-   ```bash
-   ollama run gemma:2b
-   ```
+3. **LLM Provider** (choose one):
+   - **Ollama** (for local processing): Install and run with Gemma 2B model
+     ```bash
+     ollama run gemma:2b
+     ```
+   - **OpenRouter** (for cloud-based processing): Get API key from [OpenRouter](https://openrouter.ai/)
 
 ## Installation
 
@@ -55,15 +60,43 @@ A powerful command-line interface that combines PostgreSQL database interaction 
    pip install -r requirements.txt
    ```
 
-4. Create a `.env` file:
-   ```env
-   DB_HOST=localhost
-   DB_PORT=5432
-   DB_NAME=your_database
-   DB_USER=your_username
-   DB_PASSWORD=your_password
-   OLLAMA_URL=http://localhost:11434
-   ```
+4. Create a `.env` file (see Configuration section below)
+
+## Configuration
+
+Create a `.env` file in the project root with the following variables:
+
+### Basic Database Configuration
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=your_database
+DB_USER=your_username
+DB_PASSWORD=your_password
+```
+
+### LLM Provider Configuration
+
+#### Option 1: Using Ollama (Local LLM)
+```env
+LLM_PROVIDER=ollama
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=gemma:2b
+```
+
+#### Option 2: Using OpenRouter (Cloud API)
+```env
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=your_openrouter_api_key
+OPENROUTER_MODEL=meta-llama/llama-3.1-8b-instruct:free
+```
+
+### Supported OpenRouter Models
+- `meta-llama/llama-3.1-8b-instruct:free` (Free)
+- `openai/gpt-4o-mini` (Paid)
+- `anthropic/claude-3-haiku` (Paid)
+- `google/gemini-pro` (Paid)
+- And many more available on [OpenRouter](https://openrouter.ai/models)
 
 ## Query Examples
 
@@ -106,11 +139,23 @@ ORDER BY last_name ASC;
    - `\h` - Show query history
    - `\c` - Clear screen
 
+## LLM Provider Comparison
+
+| Feature | Ollama | OpenRouter |
+|---------|--------|------------|
+| **Cost** | Free (local compute) | Pay-per-use |
+| **Privacy** | Complete privacy | Data sent to third parties |
+| **Speed** | Depends on local hardware | Generally faster |
+| **Model Selection** | Limited to locally installed | 100+ models available |
+| **Internet Required** | No | Yes |
+| **Setup Complexity** | Requires local installation | Simple API key setup |
+
 ## Project Structure
 
 ```
 .
 ├── .env
+├── .env.example
 ├── .gitignore
 ├── examples.gist
 ├── requirements.txt
@@ -120,7 +165,7 @@ ORDER BY last_name ASC;
     ├── config.py     # Configuration management
     ├── database.py   # Database operations
     ├── history.py    # Query history handling
-    ├── nlp.py        # NLP processing
+    ├── nlp.py        # NLP processing with multiple providers
     ├── cli.py        # CLI interface
     └── main.py       # Entry point
 ```
@@ -133,19 +178,39 @@ Contributions are welcome! Here are some ways you can contribute:
 2. Improve documentation
 3. Add new features
 4. Enhance NLP capabilities
-5. Add more example queries
-6. Optimize SQL generation
-
+5. Add more LLM provider integrations
+6. Add more example queries
+7. Optimize SQL generation
 
 ### Areas for Improvement
 
-- Additional LLM model support
+- Additional LLM provider support (Azure OpenAI, AWS Bedrock, etc.)
 - Query optimization suggestions
 - Schema relationship detection
 - Enhanced example matching
 - Support for more complex queries
 - Query caching
 - Additional database support
+- Streaming responses for better UX
+
+## Troubleshooting
+
+### Common Issues
+
+1. **OpenRouter API Key Issues**
+   - Ensure your API key is correctly set in the `.env` file
+   - Check your OpenRouter account has sufficient credits
+   - Verify the model name is correct
+
+2. **Ollama Connection Issues**
+   - Make sure Ollama is running: `ollama serve`
+   - Verify the model is installed: `ollama list`
+   - Check the OLLAMA_URL in your `.env` file
+
+3. **Database Connection Issues**
+   - Verify PostgreSQL is running
+   - Check database credentials in `.env` file
+   - Ensure the database exists and is accessible
 
 ## License
 
@@ -154,6 +219,7 @@ MIT License - see LICENSE file for details
 ## Acknowledgments
 
 - Ollama team for the local LLM capability
+- OpenRouter for providing access to multiple LLM APIs
 - PostgreSQL community
 - All contributors and users
 
