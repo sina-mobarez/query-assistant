@@ -38,10 +38,112 @@ class QueryExample:
         return examples
 
 
+class LLMProvider:
+    """Base class for LLM providers"""
+    
+    def generate(self, prompt: str) -> Optional[str]:
+        raise NotImplementedError
+
+
+class OllamaProvider(LLMProvider):
+    """Ollama LLM Provider"""
+    
+    def __init__(self):
+        self.base_url = Config.OLLAMA_URL
+        self.model = Config.OLLAMA_MODEL
+
+    def generate(self, prompt: str) -> Optional[str]:
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/generate",
+                json={
+                    "model": self.model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"temperature": 0.1, "top_p": 0.9},
+                },
+                timeout=60
+            )
+            response.raise_for_status()
+            return response.json()["response"]
+        except Exception as e:
+            print(f"Error calling Ollama API: {str(e)}")
+            return None
+
+
+class OpenRouterProvider(LLMProvider):
+    """OpenRouter LLM Provider"""
+    
+    def __init__(self):
+        self.api_key = Config.OPENROUTER_API_KEY
+        self.model = Config.OPENROUTER_MODEL
+        self.base_url = Config.OPENROUTER_BASE_URL
+        
+        if not self.api_key:
+            raise ValueError("OpenRouter API key not found in environment variables")
+
+    def generate(self, prompt: str) -> Optional[str]:
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://github.com/sina-mobarez/query-assistant",
+                "X-Title": "PostgreSQL NLP CLI"
+            }
+            
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a SQL expert. Convert natural language queries to valid PostgreSQL SQL queries. Return only the SQL query without any explanation."
+                    },
+                    {
+                        "role": "user", 
+                        "content": prompt
+                    }
+                ],
+                "temperature": 0.1,
+                "top_p": 0.9,
+                "max_tokens": 1000
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+            
+        except Exception as e:
+            print(f"Error calling OpenRouter API: {str(e)}")
+            return None
+
+
 class NLPToSQL:
     def __init__(self):
-        self.ollama_url = Config.OLLAMA_URL
         self.examples: List[QueryExample] = []
+        self._initialize_provider()
+
+    def _initialize_provider(self):
+        """Initialize the appropriate LLM provider"""
+        provider = Config.LLM_PROVIDER.lower()
+        
+        if provider == "openrouter":
+            try:
+                self.llm_provider = OpenRouterProvider()
+                print(f"Using OpenRouter with model: {Config.OPENROUTER_MODEL}")
+            except ValueError as e:
+                print(f"OpenRouter initialization failed: {e}")
+                print("Falling back to Ollama")
+                self.llm_provider = OllamaProvider()
+        else:
+            self.llm_provider = OllamaProvider()
+            print(f"Using Ollama with model: {Config.OLLAMA_MODEL}")
 
     def load_examples(self, file_path: str) -> bool:
         """Load query examples from a gist file"""
@@ -101,26 +203,8 @@ class NLPToSQL:
             example for score, example in scored_examples[:max_examples] if score > 0
         ]
 
-    def call_ollama(self, prompt: str) -> Optional[str]:
-        """Make API call to Ollama"""
-        try:
-            response = requests.post(
-                f"{self.ollama_url}/api/generate",
-                json={
-                    "model": "gemma:2b",
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0.1, "top_p": 0.9},
-                },
-            )
-            response.raise_for_status()
-            return response.json()["response"]
-        except Exception as e:
-            print(f"Error calling Ollama API: {str(e)}")
-            return None
-
     def generate_sql(self, natural_query: str, db) -> Optional[str]:
-        """Convert natural language to SQL using Ollama with examples"""
+        """Convert natural language to SQL using the configured LLM provider"""
         schema = self.get_table_schema(db)
         relevant_examples = self.get_relevant_examples(natural_query)
 
@@ -149,7 +233,7 @@ Requirements:
 SQL Query:"""
 
         try:
-            response = self.call_ollama(prompt)
+            response = self.llm_provider.generate(prompt)
             if not response:
                 return None
 
